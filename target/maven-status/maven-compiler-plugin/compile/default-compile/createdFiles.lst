@@ -1,0 +1,5 @@
+com/flywheels/doris/util/GeneralJsonUtil.class
+com/flywheels/doris/connector/KafkaProducerDO.class
+com/flywheels/doris/util/Constants.class
+com/flywheels/doris/util/JdbcUtil.class
+com/flywheels/doris/connector/KafkaPublisher.class
