@@ -78,7 +78,7 @@ nohup sh kafka-tools.sh &
 ./kafka-consumer-groups --zookeeper localhost:2181 --describe --group groupName
 ```
 
-### 5.其他
+### 6.其他
 #### 数据生成规则
 字符类型->UUID
 
