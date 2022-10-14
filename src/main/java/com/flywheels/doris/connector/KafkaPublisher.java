@@ -37,7 +37,6 @@ public class KafkaPublisher {
         }
         String properString = IOUtils.toString(new FileInputStream(args[0]), "UTF-8");
         String schemaSQL=args[1];
-
         CONF = load(properString);
 
         System.out.println("config is: " + JSON.toJSONString(CONF));
@@ -81,8 +80,8 @@ public class KafkaPublisher {
         kafkaProducerDO.setProps(properties);
 
         while (true) {
-            JSONArray jsonArray = new JSONArray();
             for (int i = 0; i < batchSize; i++) {
+                JSONArray jsonArray = new JSONArray();
                 //random row
                 JSONObject json = mockJson();
 
@@ -99,7 +98,6 @@ public class KafkaPublisher {
                 }
                 jsonArray.add(json);
                 kafkaProducerDO.publish(topic,jsonArray.toString());
-
             }
             Thread.sleep(batchInterval);
         }
@@ -135,7 +133,7 @@ public class KafkaPublisher {
         List<JSONObject> result = JdbcUtil.executeQuery(url, db, user, password, sql);
         for (JSONObject jsob : result) {
             String name = jsob.getString("Field");
-            String type = jsob.getString("Type");
+            String type = removeParentheses(jsob.getString("Type"));
             String key = jsob.getString("Key");
             if (StringUtils.isNotEmpty(key) && "true".equals(key) ) {
                 if(type.toUpperCase().equals("INT") || type.toUpperCase().equals("BIGINT")){
