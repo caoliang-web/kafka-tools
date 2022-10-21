@@ -1,4 +1,4 @@
-package com.flywheels.doris.util;
+package com.flywheels.doris;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
