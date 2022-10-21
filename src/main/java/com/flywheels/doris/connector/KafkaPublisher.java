@@ -99,6 +99,7 @@ public class KafkaPublisher {
                 jsonArray.add(json);
                 kafkaProducerDO.publish(topic,jsonArray.toString());
             }
+            System.out.println("导入行数：" + batchSize);
             Thread.sleep(batchInterval);
         }
 
@@ -115,7 +116,7 @@ public class KafkaPublisher {
         try {
             JdbcUtil.executeBatch(url, "", user, password, schemaSQL.trim().split(";"));
         } catch (SQLException e) {
-            LOG.info("create schema sql execute fail:",e);
+            LOG.error("create schema sql execute fail:",e);
             throw new RuntimeException(e);
         }
 
