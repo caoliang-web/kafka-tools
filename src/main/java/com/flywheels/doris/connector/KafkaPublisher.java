@@ -6,6 +6,8 @@ import com.alibaba.fastjson.JSONObject;
 import com.flywheels.doris.util.JdbcUtil;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,10 +15,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.*;
 
 import static com.flywheels.doris.util.Constants.*;
 
@@ -26,6 +30,7 @@ public class KafkaPublisher {
     private static Random random = new Random();
     private static String[] COLUMNS_KEYS;
     private static String topic;
+    private static Map<String, String> colType = new HashMap<>();
 
 
     public static void main(String[] args) throws Exception {
@@ -38,12 +43,12 @@ public class KafkaPublisher {
         String properString = IOUtils.toString(new FileInputStream(args[0]), "UTF-8");
         String schemaSQL=args[1];
         CONF = load(properString);
-
+        mockJson();
         System.out.println("config is: " + JSON.toJSONString(CONF));
         initSchema(schemaSQL);
         float repeatRate = 0;
         int keyRange = 0;
-        long batchInterval=1000l;
+        long batchInterval = 10;
         int batchSize = Integer.valueOf(CONF.get(KEY_ROWS_PER_TASK));
         if (StringUtils.isNotBlank(CONF.get(KEY_REPEAT_RATE))) {
             try {
@@ -66,48 +71,56 @@ public class KafkaPublisher {
                 LOG.warn("batchInterval parse error,use default value 1000");
             }
         }
-        if(StringUtils.isBlank(CONF.get(KAFKA_TOPIC))){
-            topic=CONF.get(KEY_DATABASE)+"_"+CONF.get(KEY_TABLE);
-        }else{
-            topic=CONF.get(KAFKA_TOPIC);
+        if (StringUtils.isBlank(CONF.get(KAFKA_TOPIC))) {
+            topic = CONF.get(KEY_DATABASE) + "_" + CONF.get(KEY_TABLE);
+        } else {
+            topic = CONF.get(KAFKA_TOPIC);
         }
         Properties properties = new Properties();
         properties.put("bootstrap.servers", CONF.get(KAFKA_BOOTSTRAP_SERVERS));
         properties.put("acks", "1");
         properties.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         properties.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        KafkaProducerDO kafkaProducerDO = new KafkaProducerDO();
-        kafkaProducerDO.setProps(properties);
+
+        KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
+        ExecutorService executor = Executors.newFixedThreadPool(Integer.parseInt(CONF.get(KEY_THREAD_NUM)));
+        ProducerRecord<String, String> record;
+
 
         while (true) {
-            for (int i = 0; i < batchSize; i++) {
-                JSONArray jsonArray = new JSONArray();
-                //random row
-                JSONObject json = mockJson();
-
-                //重复率参数
-                if (repeatRate > 0 && i < batchSize * repeatRate && COLUMNS_KEYS.length > 0) {
-                    json.put(COLUMNS_KEYS[0], random.nextInt(batchSize));
-                }
-
-                //将key的基数扩大
-                if (keyRange > 0) {
-                    for (int keyIndex = 0; keyIndex < COLUMNS_KEYS.length; keyIndex++) {
-                        json.put(COLUMNS_KEYS[keyIndex], random.nextInt(keyRange));
+            try {
+                for (int i = 0; i < batchSize; i++) {
+                    JSONArray jsonArray = new JSONArray();
+                    //random row
+                    JSONObject json = makeJson();
+                    //重复率参数
+                    if (repeatRate > 0 && i < batchSize * repeatRate && COLUMNS_KEYS.length > 0) {
+                        json.put(COLUMNS_KEYS[0], random.nextInt(batchSize));
                     }
+
+                    //将key的基数扩大
+                    if (keyRange > 0) {
+                        for (int keyIndex = 0; keyIndex < COLUMNS_KEYS.length; keyIndex++) {
+                            json.put(COLUMNS_KEYS[keyIndex], random.nextInt(keyRange));
+                        }
+                    }
+                    jsonArray.add(json);
+                    record = new ProducerRecord<String, String>(topic, jsonArray.toJSONString());
+                    executor.submit(new KafkaProducerThread(producer, record));
                 }
-                jsonArray.add(json);
-                kafkaProducerDO.publish(topic,jsonArray.toString());
+                System.out.println("导入行数：" + batchSize);
+                Thread.sleep(batchInterval);
+            } catch (Exception e) {
+                LOG.error("Send message exception:{}", e.getMessage());
+            } finally {
+                producer.close();
+                executor.shutdown();
             }
-            System.out.println("导入行数：" + batchSize);
-            Thread.sleep(batchInterval);
         }
-
-
     }
 
-    private static void initSchema(String schemaSQL){
-        if(StringUtils.isBlank(schemaSQL)){
+    private static void initSchema(String schemaSQL) {
+        if (StringUtils.isBlank(schemaSQL)) {
             return;
         }
         String url = CONF.get(KEY_FE_IP) + ":" + CONF.get(KEY_JDBC_PORT);
@@ -116,14 +129,13 @@ public class KafkaPublisher {
         try {
             JdbcUtil.executeBatch(url, "", user, password, schemaSQL.trim().split(";"));
         } catch (SQLException e) {
-            LOG.error("create schema sql execute fail:",e);
+            LOG.error("create schema sql execute fail:", e);
             throw new RuntimeException(e);
         }
 
     }
-    public static JSONObject mockJson() {
-        Map<String, String> colType = new HashMap<>();
-        JSONObject jsonObject = new JSONObject();
+
+    public static void mockJson() {
         List<String> columnsKeys = new ArrayList<>();
         String url = CONF.get(KEY_FE_IP) + ":" + CONF.get(KEY_JDBC_PORT);
         String db = CONF.get(KEY_DATABASE);
@@ -136,14 +148,20 @@ public class KafkaPublisher {
             String name = jsob.getString("Field");
             String type = removeParentheses(jsob.getString("Type"));
             String key = jsob.getString("Key");
-            if (StringUtils.isNotEmpty(key) && "true".equals(key) ) {
-                if(type.toUpperCase().equals("INT") || type.toUpperCase().equals("BIGINT")){
+            if (StringUtils.isNotEmpty(key) && "true".equals(key)) {
+                if (type.toUpperCase().equals("INT") || type.toUpperCase().equals("BIGINT")) {
                     columnsKeys.add(name);
                 }
             }
             colType.put(jsob.getString("Field"), removeParentheses(jsob.getString("Type")));
         }
         COLUMNS_KEYS = columnsKeys.toArray(new String[]{});
+
+    }
+
+
+    private static JSONObject makeJson() {
+        JSONObject jsonObject = new JSONObject();
         colType.forEach((k, v) -> {
             Object value = null;
             switch (v.toUpperCase(Locale.ROOT)) {

@@ -8,11 +8,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Properties;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class KafkaProducerDO {
     //初始化logger
     private static final Logger LOG = LoggerFactory.getLogger(KafkaPublisher.class);
     private Properties props;
+
 
 
     public KafkaProducerDO() {
@@ -35,6 +38,7 @@ public class KafkaProducerDO {
     public void setProps(Properties props) {
         this.props = props;
     }
+
 
     /**
      * 发布
