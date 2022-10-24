@@ -18,4 +18,6 @@ public class Constants {
     public static String KEY_KEY_RANGE = "key_range";
     public static String KEY_BATCH_INTERVAL = "batch_interval";
     public static String KEY_THREAD_NUM = "thread_num";
+    public static String KEY_TOTAL_NUMBER = "total_number";
+
 }

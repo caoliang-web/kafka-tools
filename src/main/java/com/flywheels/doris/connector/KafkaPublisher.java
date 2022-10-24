@@ -76,6 +76,14 @@ public class KafkaPublisher {
         } else {
             topic = CONF.get(KAFKA_TOPIC);
         }
+
+        int totalNum;
+        if (StringUtils.isBlank(CONF.get(KEY_TOTAL_NUMBER))) {
+            totalNum = Integer.MAX_VALUE;
+        } else {
+            totalNum = Integer.valueOf(CONF.get(KEY_ROWS_PER_TASK));
+
+        }
         Properties properties = new Properties();
         properties.put("bootstrap.servers", CONF.get(KAFKA_BOOTSTRAP_SERVERS));
         properties.put("acks", "1");
@@ -85,10 +93,10 @@ public class KafkaPublisher {
         KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
         ExecutorService executor = Executors.newFixedThreadPool(Integer.parseInt(CONF.get(KEY_THREAD_NUM)));
         ProducerRecord<String, String> record;
-
-
-        while (true) {
-            try {
+        Boolean bool = true;
+        int count = 0;
+        try {
+            while (bool) {
                 for (int i = 0; i < batchSize; i++) {
                     JSONArray jsonArray = new JSONArray();
                     //random row
@@ -108,14 +116,18 @@ public class KafkaPublisher {
                     record = new ProducerRecord<String, String>(topic, jsonArray.toJSONString());
                     executor.submit(new KafkaProducerThread(producer, record));
                 }
+                count = count + batchSize;
+                if (count > totalNum) {
+                    bool = false;
+                }
                 System.out.println("导入行数：" + batchSize);
                 Thread.sleep(batchInterval);
-            } catch (Exception e) {
-                LOG.error("Send message exception:{}", e.getMessage());
-            } finally {
-                producer.close();
-                executor.shutdown();
             }
+        } catch (Exception e) {
+            LOG.error("Send message exception:{}", e.getMessage());
+        } finally {
+            producer.close();
+            executor.shutdown();
         }
     }
 
