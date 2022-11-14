@@ -7,7 +7,9 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.*;
 
 public class JdbcUtil {
 
@@ -101,5 +103,38 @@ public class JdbcUtil {
             list.add(jsonObj);
         }
         return list;
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+//        LinkedBlockingDeque<Integer> linkedBlockingDeque = new LinkedBlockingDeque<>(1);
+//        linkedBlockingDeque.put(1);
+//        while(true){
+//
+//            Thread flushThread = new Thread(new Runnable() {
+//                @Override
+//                public void run() {
+//                    int i = 0;
+//                    Integer take = null;
+//                    try {
+//                        take = linkedBlockingDeque.takeLast();
+//                        linkedBlockingDeque.add(i);
+//                        System.out.println("线程名称："+ Thread.currentThread().getName() +",take" + take);
+//                    } catch (InterruptedException e) {
+//                        throw new RuntimeException(e);
+//                    }
+//                    i++;
+//                }
+//            });
+//            flushThread.setDaemon(true);
+//            flushThread.start();
+//        }
+
+
+//        Iterator<Integer> iterator4 = linkedBlockingDeque.iterator();
+//
+//        while (iterator4.hasNext()){
+//            System.out.println("Iterator的offerFirst结果：" + iterator4.next());
+//        }
+
     }
 }
