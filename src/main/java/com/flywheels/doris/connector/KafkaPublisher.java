@@ -33,13 +33,14 @@ public class KafkaPublisher {
 
     public static void main(String[] args) throws Exception {
 
-        /*if (args.length < 1) {
+        if (args.length < 1) {
             LOG.error("缺少配置参数");
             System.exit(1);
-        }*/
-        String properString = IOUtils.toString(new FileInputStream("/Users/caoliang/Documents/kafka/kafka-tools/kafka-tools.conf"), "UTF-8");
+        }
+//        String properString = IOUtils.toString(new FileInputStream("/Users/caoliang/Documents/kafka/kafka-tools/kafka-tools.conf"), "UTF-8");
+        String properString = IOUtils.toString(new FileInputStream(args[0]), "UTF-8");
 
-        LOG.info("doris相关参数{}", properString);
+        LOG.warn("doris相关参数{}", properString);
         jsonObject = JSON.parseObject(properString);
         JSONArray task = jsonObject.getJSONArray("task");
         ExecutorService executorService = Executors.newFixedThreadPool(task.size());
