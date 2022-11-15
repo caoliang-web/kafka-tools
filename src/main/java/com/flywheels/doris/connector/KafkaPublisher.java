@@ -34,8 +34,6 @@ public class KafkaPublisher {
     private static Map<String, String> colType = new HashMap<>();
 
 
-
-
     public static void main(String[] args) throws Exception {
 
         /*if (args.length < 1) {
@@ -49,23 +47,22 @@ public class KafkaPublisher {
 
         JSONArray task = jsonObject.getJSONArray("task");
 
-        ExecutorService executorService = Executors.newFixedThreadPool(8 - 1);
+        ExecutorService executorService = Executors.newFixedThreadPool(task.size());
 
         try {
             for (int i = 0; i < task.size(); i++) {
-                JSONObject jsonObject1 = task.getJSONObject(i);
-                Properties properties = new Properties();
-                properties.put("bootstrap.servers", jsonObject.getString(KAFKA_BOOTSTRAP_SERVERS));
-                properties.put("acks", "1");
-                properties.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-                properties.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-                KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
-
-
-                executorService.submit(new Runnable() {
+                final int index = i;
+                executorService.execute(new Runnable() {
                     @Override
                     public void run() {
-                            executorTask(jsonObject1,producer);
+                        JSONObject jsonObject1 = task.getJSONObject(index);
+                        System.out.println(jsonObject1.toJSONString());
+                        executorTask(jsonObject1);
+                        try {
+                            Thread.sleep(10000);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
                     }
                 });
             }
@@ -74,11 +71,10 @@ public class KafkaPublisher {
         } finally {
             executorService.shutdown();
         }
-
-
+        Thread.sleep(1000);
     }
 
-    private static void initSchema(String schemaSQL) {
+    public static void initSchema(String schemaSQL) {
         if (StringUtils.isBlank(schemaSQL)) {
             return;
         }
@@ -119,7 +115,7 @@ public class KafkaPublisher {
     }
 
 
-    private static JSONObject makeJson() {
+    public static JSONObject makeJson() {
         JSONObject jsonObject = new JSONObject();
         colType.forEach((k, v) -> {
             Object value = null;
@@ -206,7 +202,13 @@ public class KafkaPublisher {
         return str;
     }
 
-    public static void executorTask(JSONObject json, KafkaProducer<String, String> producer){
+    public static void executorTask(JSONObject json) {
+        Properties properties = new Properties();
+        properties.put("bootstrap.servers", jsonObject.getString(KAFKA_BOOTSTRAP_SERVERS));
+        properties.put("acks", "1");
+        properties.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        properties.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
         mockJson(json);
         initSchema(json.getString("sql"));
         float repeatRate = 0;
@@ -272,7 +274,7 @@ public class KafkaPublisher {
                 executor.submit(new KafkaProducerThread(producer, record));
             }
             count = count + batchSize;
-            LOG.warn("线程-:{} , topic : {} , 导入行数：{}",Thread.currentThread().getName(),topic ,count);
+            LOG.warn("线程-:{} , topic : {} , 导入行数：{}", Thread.currentThread().getName(), topic, count);
             if (count >= totalNum) {
                 bool = false;
             }
