@@ -250,17 +250,17 @@ public class KafkaPublisher {
             topic = json.getString(KAFKA_TOPIC);
         }
 
-        int totalNum;
+        long totalNum;
         if (StringUtils.isBlank(json.getString(KEY_TOTAL_NUMBER))) {
-            totalNum = Integer.MAX_VALUE;
+            totalNum = Long.MAX_VALUE;
         } else {
-            totalNum = Integer.valueOf(json.getString(KEY_TOTAL_NUMBER));
+            totalNum = Long.valueOf(json.getString(KEY_TOTAL_NUMBER));
 
         }
         ExecutorService executor = Executors.newFixedThreadPool(Integer.parseInt(json.getString(KEY_THREAD_NUM)));
         ProducerRecord<String, String> record;
         Boolean bool = true;
-        int count = 0;
+        long count = 0L;
         try {
             while (bool) {
                 for (int j = 0; j < batchSize; j++) {

@@ -137,31 +137,5 @@ public class JdbcUtil {
 //        while (iterator4.hasNext()){
 //            System.out.println("Iterator的offerFirst结果：" + iterator4.next());
 //        }
-
-
-         ExecutorService pool = Executors.newFixedThreadPool(3);
-         for (int i = 0; i <2; i++) {
-             final int index = i;
-             pool.execute(new Runnable() {
-                 @Override
-                 public void run() {
-                     add(index);
-                     System.out.println(Thread.currentThread().getName() + "---------" + index);
-
-
-                 }
-             });
-         }
-        pool.shutdown();
-    }
-
-    public static void add(int i){
-        int count=0;
-
-        while (count < 10){
-            System.out.println(Thread.currentThread().getName() + "---" + j+i);
-            System.out.println(Thread.currentThread().getName() + "--" + i);
-            count ++;
-        }
     }
 }
