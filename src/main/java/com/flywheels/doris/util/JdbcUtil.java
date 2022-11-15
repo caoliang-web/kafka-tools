@@ -22,6 +22,8 @@ public class JdbcUtil {
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(JdbcUtil.class);
+    private static int j = 3;
+
 
 
     public static int[] executeBatch(String hostUrl,String db,String user,String password,String[] sqls) throws SQLException{
@@ -143,16 +145,23 @@ public class JdbcUtil {
              pool.execute(new Runnable() {
                  @Override
                  public void run() {
+                     add(index);
+                     System.out.println(Thread.currentThread().getName() + "---------" + index);
 
-                     try {
-                         Thread.sleep(10000);
-                         System.out.println(Thread.currentThread().getName() + "---------" + index);
-                     } catch (InterruptedException e) {
-                         throw new RuntimeException(e);
-                     }
+
                  }
              });
          }
         pool.shutdown();
+    }
+
+    public static void add(int i){
+        int count=0;
+
+        while (count < 10){
+            System.out.println(Thread.currentThread().getName() + "---" + j+i);
+            System.out.println(Thread.currentThread().getName() + "--" + i);
+            count ++;
+        }
     }
 }

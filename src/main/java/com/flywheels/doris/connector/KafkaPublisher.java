@@ -10,14 +10,11 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.nio.ch.ThreadPool;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.StringReader;
 import java.sql.SQLException;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -30,8 +27,8 @@ public class KafkaPublisher {
     private static JSONObject jsonObject;
     private static Random random = new Random();
     private static String[] COLUMNS_KEYS;
-    private static String topic;
     private static Map<String, String> colType = new HashMap<>();
+    private static KafkaProducer<String, String> producer;
 
 
     public static void main(String[] args) throws Exception {
@@ -44,25 +41,19 @@ public class KafkaPublisher {
 
         LOG.info("doris相关参数{}", properString);
         jsonObject = JSON.parseObject(properString);
-
         JSONArray task = jsonObject.getJSONArray("task");
-
         ExecutorService executorService = Executors.newFixedThreadPool(task.size());
 
         try {
             for (int i = 0; i < task.size(); i++) {
                 final int index = i;
+
                 executorService.execute(new Runnable() {
                     @Override
                     public void run() {
                         JSONObject jsonObject1 = task.getJSONObject(index);
-                        System.out.println(jsonObject1.toJSONString());
+                        System.out.println(Thread.currentThread().getName() + "|" + jsonObject1.toJSONString());
                         executorTask(jsonObject1);
-                        try {
-                            Thread.sleep(10000);
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
                     }
                 });
             }
@@ -70,8 +61,10 @@ public class KafkaPublisher {
             LOG.error("Send message exception:{}", e.getMessage());
         } finally {
             executorService.shutdown();
+            if (producer != null) {
+                producer.close();
+            }
         }
-        Thread.sleep(1000);
     }
 
     public static void initSchema(String schemaSQL) {
@@ -90,7 +83,10 @@ public class KafkaPublisher {
 
     }
 
-    public static void mockJson(JSONObject jsonStr) {
+    public static Map<String, Object> mockJson(JSONObject jsonStr) {
+        Map<String, Object> map = new HashMap<>();
+        Map<String, String> colType = new HashMap<>();
+        String[] COLUMNS_KEYS;
         List<String> columnsKeys = new ArrayList<>();
         String url = jsonObject.getString(KEY_FE_IP) + ":" + jsonObject.getString(KEY_JDBC_PORT);
         String db = jsonStr.getString(KEY_DATABASE);
@@ -111,12 +107,17 @@ public class KafkaPublisher {
             colType.put(jsob.getString("Field"), removeParentheses(jsob.getString("Type")));
         }
         COLUMNS_KEYS = columnsKeys.toArray(new String[]{});
+        map.put("colType", colType);
+        map.put("COLUMNS_KEYS", COLUMNS_KEYS);
+        return map;
 
     }
 
 
-    public static JSONObject makeJson() {
+    public static JSONObject makeJson(JSONObject jsonStr) {
         JSONObject jsonObject = new JSONObject();
+        Map<String, Object> map = mockJson(jsonStr);
+        Map<String, String> colType = (Map<String, String>) map.get("colType");
         colType.forEach((k, v) -> {
             Object value = null;
             switch (v.toUpperCase(Locale.ROOT)) {
@@ -203,17 +204,23 @@ public class KafkaPublisher {
     }
 
     public static void executorTask(JSONObject json) {
+
+
         Properties properties = new Properties();
         properties.put("bootstrap.servers", jsonObject.getString(KAFKA_BOOTSTRAP_SERVERS));
         properties.put("acks", "1");
         properties.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         properties.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
-        KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
-        mockJson(json);
+        producer = new KafkaProducer<String, String>(properties);
+
+        Map<String, Object> map = mockJson(json);
+        String[] COLUMNS_KEYS = (String[]) map.get("COLUMNS_KEYS");
         initSchema(json.getString("sql"));
         float repeatRate = 0;
         int keyRange = 0;
         long batchInterval = 10;
+        String topic = "";
+
         int batchSize = Integer.valueOf(json.getString(KEY_ROWS_PER_TASK));
         if (StringUtils.isNotBlank(json.getString(KEY_REPEAT_RATE))) {
             try {
@@ -253,38 +260,41 @@ public class KafkaPublisher {
         ProducerRecord<String, String> record;
         Boolean bool = true;
         int count = 0;
-        while (bool) {
-            for (int j = 0; j < batchSize; j++) {
-                JSONArray jsonArray = new JSONArray();
-                //random row
-                JSONObject json1 = makeJson();
-                //重复率参数
-                if (repeatRate > 0 && j < batchSize * repeatRate && COLUMNS_KEYS.length > 0) {
-                    json1.put(COLUMNS_KEYS[0], random.nextInt(batchSize));
-                }
-
-                //将key的基数扩大
-                if (keyRange > 0) {
-                    for (int keyIndex = 0; keyIndex < COLUMNS_KEYS.length; keyIndex++) {
-                        json1.put(COLUMNS_KEYS[keyIndex], random.nextInt(keyRange));
+        try {
+            while (bool) {
+                for (int j = 0; j < batchSize; j++) {
+                    JSONArray jsonArray = new JSONArray();
+                    //random row
+                    JSONObject json1 = makeJson(json);
+                    //重复率参数
+                    if (repeatRate > 0 && j < batchSize * repeatRate && COLUMNS_KEYS.length > 0) {
+                        json1.put(COLUMNS_KEYS[0], random.nextInt(batchSize));
                     }
+
+                    //将key的基数扩大
+                    if (keyRange > 0) {
+                        for (int keyIndex = 0; keyIndex < COLUMNS_KEYS.length; keyIndex++) {
+                            json1.put(COLUMNS_KEYS[keyIndex], random.nextInt(keyRange));
+                        }
+                    }
+                    jsonArray.add(json1);
+                    record = new ProducerRecord<String, String>(topic, jsonArray.toJSONString());
+                    executor.submit(new KafkaProducerThread(producer, record));
                 }
-                jsonArray.add(json1);
-                record = new ProducerRecord<String, String>(topic, jsonArray.toJSONString());
-                executor.submit(new KafkaProducerThread(producer, record));
+                count = count + batchSize;
+                if (count >= totalNum) {
+                    bool = false;
+                }
+                try {
+                    LOG.warn("线程-:{} , topic : {} , 导入行数：{}", Thread.currentThread().getName(), topic, count);
+                    Thread.sleep(batchInterval);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
-            count = count + batchSize;
-            LOG.warn("线程-:{} , topic : {} , 导入行数：{}", Thread.currentThread().getName(), topic, count);
-            if (count >= totalNum) {
-                bool = false;
-            }
-            try {
-                Thread.sleep(batchInterval);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+        } finally {
+            executor.shutdown();
         }
-        executor.shutdown();
-        producer.close();
+
     }
 }
